@@ -45,6 +45,7 @@
 #include <sys/socket.h>    /* for sockaddr        */
 #include <sys/signal.h>    /* for sigset_t        */
 #include <sys/select.h>
+#include <stdint.h>
 
     /* fallbacks for essential typedefs */
 #ifndef _PTHREAD_PRIVATE
@@ -417,8 +418,11 @@ struct iovec {
 typedef void *Sfdisc_t;
 #endif
 
+#include <stdint.h>
+
+extern void pth_save_thread_cpu_addr(uintptr_t *addr);
     /* global functions */
-extern int            pth_init(void);
+extern pth_t          pth_init(uintptr_t);
 extern int            pth_kill(void);
 extern long           pth_ctrl(unsigned long, ...);
 extern long           pth_version(void);
@@ -432,7 +436,7 @@ extern int            pth_attr_get(pth_attr_t, int, ...);
 extern int            pth_attr_destroy(pth_attr_t);
 
     /* thread functions */
-extern pth_t          pth_spawn(pth_attr_t, void *(*)(void *), void *);
+extern pth_t          pth_spawn(pth_attr_t, uintptr_t, void *(*)(void *), void *);
 extern int            pth_once(pth_once_t *, void (*)(void *), void *);
 extern pth_t          pth_self(void);
 extern int            pth_suspend(pth_t);
@@ -585,4 +589,3 @@ END_DECLARATION
      || pth_event_status(ev) == PTH_STATUS_FAILED   )
 
 #endif /* _PTH_H_ */
-

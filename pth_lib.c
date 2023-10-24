@@ -56,14 +56,14 @@ static void pth_ex_terminate(ex_t *ex)
 #endif
 
 /* initialize the package */
-int pth_init(void)
+pth_t pth_init(uintptr_t qemu_cpu_ptr)
 {
     pth_attr_t t_attr;
 
     /* support for implicit initialization calls
        and to prevent multiple explict initialization, too */
     if (pth_initialized)
-        return pth_error(FALSE, EPERM);
+        return NULL;
     else
         pth_initialized = TRUE;
 
@@ -75,7 +75,7 @@ int pth_init(void)
     /* initialize the scheduler */
     if (!pth_scheduler_init()) {
         pth_shield { pth_syscall_kill(); }
-        return pth_error(FALSE, EAGAIN);
+        return NULL;
     }
 
 #ifdef PTH_EX
@@ -92,14 +92,14 @@ int pth_init(void)
     pth_attr_set(t_attr, PTH_ATTR_CANCEL_STATE, PTH_CANCEL_DISABLE);
     pth_attr_set(t_attr, PTH_ATTR_STACK_SIZE,   64*1024);
     pth_attr_set(t_attr, PTH_ATTR_STACK_ADDR,   NULL);
-    pth_sched = pth_spawn(t_attr, pth_scheduler, NULL);
+    pth_sched = pth_spawn(t_attr, 0, pth_scheduler, NULL);
     if (pth_sched == NULL) {
         pth_shield {
             pth_attr_destroy(t_attr);
             pth_scheduler_kill();
             pth_syscall_kill();
         }
-        return FALSE;
+        return NULL;
     }
 
     /* spawn a thread for the main program */
@@ -109,14 +109,14 @@ int pth_init(void)
     pth_attr_set(t_attr, PTH_ATTR_CANCEL_STATE, PTH_CANCEL_ENABLE|PTH_CANCEL_DEFERRED);
     pth_attr_set(t_attr, PTH_ATTR_STACK_SIZE,   0 /* special */);
     pth_attr_set(t_attr, PTH_ATTR_STACK_ADDR,   NULL);
-    pth_main = pth_spawn(t_attr, (void *(*)(void *))(-1), NULL);
+    pth_main = pth_spawn(t_attr, qemu_cpu_ptr, (void *(*)(void *))(-1), NULL);
     if (pth_main == NULL) {
         pth_shield {
             pth_attr_destroy(t_attr);
             pth_scheduler_kill();
             pth_syscall_kill();
         }
-        return FALSE;
+        return NULL;
     }
     pth_attr_destroy(t_attr);
 
@@ -132,7 +132,7 @@ int pth_init(void)
 
     /* came back, so let's go home... */
     pth_debug1("pth_init: leave");
-    return TRUE;
+    return pth_main;
 }
 
 /* kill the package internals */
@@ -221,7 +221,8 @@ static void pth_spawn_trampoline(void)
     /* NOTREACHED */
     abort();
 }
-pth_t pth_spawn(pth_attr_t attr, void *(*func)(void *), void *arg)
+
+pth_t pth_spawn(pth_attr_t attr, uintptr_t qemu_cpu_ptr, void *(*func)(void *), void *arg)
 {
     pth_t t;
     unsigned int stacksize;
@@ -326,6 +327,10 @@ pth_t pth_spawn(pth_attr_t attr, void *(*func)(void *), void *arg)
     }
 
     pth_debug1("pth_spawn: leave");
+
+        if(qemu_cpu_ptr != 0) {
+            t->qemu_cpu_ptr = qemu_cpu_ptr;
+        }
 
     /* the returned thread id is just the pointer
        to the thread control block... */
@@ -628,3 +633,6 @@ int pth_once(pth_once_t *oncectrl, void (*constructor)(void *), void *arg)
     return TRUE;
 }
 
+void pth_save_thread_cpu_addr(uintptr_t *addr) {
+    thread_cpu = addr;
+}
